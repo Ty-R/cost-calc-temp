@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tool Cost Overview</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 30px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    label { font-size: 1rem; margin-right: 10px; }
+  </style>
+</head>
+<body>
+
+  <h1>Tool Cost Projection</h1>
+
+  <label for="globalUsers">Number of Users: <span id="globalUsersLabel">10</span></label>
+  <input type="range" min="10" max="1000" step="10" value="10" id="globalUsers" oninput="updateTable()">
+
+  <label for="discountSlider">Discount: <span id="discountLabel">0%</span></label>
+  <input type="range" min="0" max="100" step="5" value="0" id="discountSlider" oninput="updateTable()">  
+
+  <table id="costTable">
+    <!-- Dynamic content -->
+  </table>
+
+  <script>
+    const pricing = {
+      postman: {
+        "Free": 0,
+        "Basic": 14,
+        "Professional": 29,
+        "Enterprise": 49,
+        "Enterprise (with all add-ons)": 99
+      },
+      "hoppscotch-cloud": {
+        "Free": 0,
+        "Enterprise": 8
+      },
+      "hoppscotch-selfhosted": {
+        // We'll calculate dynamically
+      },
+      insomnia: {
+        "Hobby": 0,
+        "Pro": 12,
+        "Enterprise": 45
+      }
+    };
+
+    const toolNames = {
+      postman: "Postman",
+      "hoppscotch-cloud": "Hoppscotch (Cloud)",
+      "hoppscotch-selfhosted": "Hoppscotch (Self-hosted)",
+      insomnia: "Insomnia"
+    };
+
+    // const ec2InstanceMap = [
+    //   { vcpu: 1, type: "t3.micro", monthly: 8 },
+    //   { vcpu: 2, type: "t3.small", monthly: 16 },
+    //   { vcpu: 4, type: "t3.medium", monthly: 32 },
+    //   { vcpu: 8, type: "t3.large", monthly: 64 },
+    //   { vcpu: 16, type: "t3.xlarge", monthly: 128 }
+    // ];
+
+    const ec2InstanceMap = [
+        { type: "t3.micro", vcpu: 2, capacity: 20, monthly: 8 },
+        { type: "t3.small", vcpu: 2, capacity: 40, monthly: 16 },
+        { type: "t3.medium", vcpu: 2, capacity: 80, monthly: 32 },
+        { type: "t3.large", vcpu: 2, capacity: 160, monthly: 64 },
+        { type: "t3.xlarge", vcpu: 4, capacity: 320, monthly: 128 }
+    ];
+
+    function formatCurrency(amount) {
+      return '$' + amount.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // function getSelfHostedPricing(users) {
+    //   const estimatedVCPU = Math.ceil(users / 10);
+    //   const instance = ec2InstanceMap.find(inst => inst.vcpu >= estimatedVCPU) || ec2InstanceMap[ec2InstanceMap.length - 1];
+    //   return {
+    //     label: `${instance.type} (~${instance.vcpu} vCPUs)`,
+    //     monthly: instance.monthly,
+    //     yearly: instance.monthly * 12
+    //   };
+    // }
+
+    function getSelfHostedPricing(users) {
+        const estimatedConcurrentUsers = Math.ceil(users * 0.2); // assume 20% concurrent
+        const instance = ec2InstanceMap.find(inst => inst.capacity >= estimatedConcurrentUsers) || ec2InstanceMap[ec2InstanceMap.length - 1];
+        return {
+            label: `${instance.type} (~${instance.capacity} concurrent users)`,
+            monthly: instance.monthly,
+            yearly: instance.monthly * 12
+        };
+    }
+
+    function updateTable() {
+  const users = parseInt(document.getElementById('globalUsers').value);
+  const discount = parseInt(document.getElementById('discountSlider').value);
+  document.getElementById('globalUsersLabel').textContent = users;
+  document.getElementById('discountLabel').textContent = `${discount}%`;
+
+  let html = '<tr><th>Tool & Tier</th><th>Monthly Cost</th><th>Yearly Cost</th></tr>';
+
+  for (const tool in pricing) {
+    if (tool === "hoppscotch-selfhosted") {
+      const selfHosted = getSelfHostedPricing(users);
+      const name = `${toolNames[tool]} – ${selfHosted.label} (Flat)`;
+      html += `<tr>
+                <td>${name}</td>
+                <td>${formatCurrency(selfHosted.monthly)}</td>
+                <td>${formatCurrency(selfHosted.yearly)}</td>
+               </tr>`;
+      continue;
+    }
+
+    for (const tier in pricing[tool]) {
+      const basePrice = pricing[tool][tier];
+      const isFlat = typeof basePrice === 'string';
+
+      const effectivePricePerUser = isFlat ? 0 : basePrice * (1 - discount / 100);
+      const monthlyCost = isFlat ? 0 : effectivePricePerUser * users;
+      const yearlyCost = monthlyCost * 12;
+      const priceDisplay = isFlat
+        ? 'Flat'
+        : `${formatCurrency(basePrice)} ➝ ${formatCurrency(effectivePricePerUser)} per user/month`;
+
+      const label = `${toolNames[tool]} – ${tier} (${priceDisplay})`;
+
+      html += `<tr>
+                <td>${label}</td>
+                <td>${formatCurrency(monthlyCost)}</td>
+                <td>${formatCurrency(yearlyCost)}</td>
+               </tr>`;
+    }
+  }
+
+  document.getElementById('costTable').innerHTML = html;
+}
+
+    updateTable();
+  </script>
+
+</body>
+</html>
